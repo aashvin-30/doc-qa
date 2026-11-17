@@ -1,0 +1,56 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: doc-qa
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/docqa}
+    username: ${DB_USER:docqa}
+    password: ${DB_PASSWORD:docqa}
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+  mvc:
+    async:
+      request-timeout: 300000 # 5 min for streaming answers
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+app:
+  # Which LLM writes the answers: gemini (free tier, only needs GEMINI_API_KEY) or claude (needs ANTHROPIC_API_KEY).
+  # Embeddings always use Gemini.
+  answer-provider: ${ANSWER_PROVIDER:gemini}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  chunking:
+    chunk-size: 1200      # characters per chunk
+    chunk-overlap: 200    # characters shared between neighbouring chunks
+  retrieval:
+    top-k: 6
+    min-similarity: 0.35  # cosine similarity floor (0..1)
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    embedding-model: gemini-embedding-001
+    dimensions: 768       # must match vector(768) in the Flyway migration
+    batch-size: 50
+    # Used when answer-provider=gemini. "gemini-flash-latest" always points to Google's current Flash model.
+    chat-model: ${GEMINI_CHAT_MODEL:gemini-flash-latest}
+    # Tried in order when the main model is overloaded (429/5xx) or doesn't respond in time.
+    chat-fallback-models: ${GEMINI_FALLBACK_MODELS:gemini-flash-lite-latest}
+    response-timeout-seconds: 30   # max wait for a model to start answering
+    max-output-tokens: 8192
+  claude:
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: claude-opus-5-5
+    max-tokens: 16000
+    effort: medium        # low | medium | high | xhigh | max
+    fallbacks-enabled: true
