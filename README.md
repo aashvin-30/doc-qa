@@ -1,120 +1,209 @@
-# Doc-QA — RAG Document Q&A Assistant
+<div align="center">
 
-Upload documents, then ask questions about them. Answers stream back with numbered citations that point to the exact excerpts used. Each chat has its own files: start a new chat, add files with the ＋ button in the message box (or drag them in), and that chat answers only from those files. Chats are saved, so you can reopen, rename or delete them later.
+# 📄 Doc-QA
 
-| Layer | Tech |
-|---|---|
-| Frontend | React 18 + TypeScript + Vite |
-| Backend | Spring Boot 3.5 (Java 21), REST + Server-Sent Events |
-| Database | PostgreSQL 17 + pgvector (HNSW cosine index), Flyway migrations |
-| Embeddings | Google Gemini `gemini-embedding-001` (768 dims) via REST |
-| Answers | Choose with `ANSWER_PROVIDER`: **Gemini** `gemini-flash-latest` via REST (the default, free tier) or **Claude** `claude-opus-5-5` via the official Java SDK. Both stream. |
+**Chat with your documents.** Upload PDFs, Word files or text, ask questions in plain language, and get answers that cite the exact passages they came from.
+
+![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=springboot&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)
+![Gemini](https://img.shields.io/badge/Google-Gemini-8E75B2?logo=googlegemini&logoColor=white)
+![Claude](https://img.shields.io/badge/Anthropic-Claude-D97757?logo=anthropic&logoColor=white)
+
+<img src="docs/screenshots/chat-light.png" alt="Doc-QA answering a question about an employee handbook, with a comparison table and numbered citations" width="900" />
+
+</div>
+
+---
+
+## What it does
+
+Doc-QA is a **RAG (retrieval-augmented generation)** assistant. When you add a file, it's split into chunks, each chunk is turned into a vector with Google Gemini embeddings, and the vectors are stored in PostgreSQL with **pgvector**. When you ask a question, the most relevant chunks are retrieved and handed to an LLM (Gemini by default, or Claude), which writes the answer and cites its sources as `[1]`, `[2]`, and so on.
+
+- 💬 **Chats with their own files.** Each chat answers only from the files you added to it.
+- 📎 **Multi-file upload.** Use the **＋** button, select several files with Ctrl, or drag and drop. Each file shows a progress bar.
+- 🔎 **Clickable citations.** Every claim links to the source excerpt, with the file name, page and match score.
+- ⚡ **Streaming answers.** Text appears as it's written, with a Stop button.
+- 🗂️ **Saved history.** Chats are grouped by date and can be searched, renamed and deleted. Follow-up questions keep the conversation's context.
+- 🎨 **Themes.** Light, Dark or Auto, with 5 accent colors. Works on phones too.
+- 🛡️ **Resilient.** Timeouts, automatic model fallback, retries on rate limits, and recovery for uploads cut off by a restart.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/citations.png" alt="Citation panel showing the source excerpt and match score" /></td>
+    <td width="50%"><img src="docs/screenshots/chat-dark.png" alt="Dark theme with the Ocean accent" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Citations</b>: click a <code>[n]</code> chip to see the exact passage</td>
+    <td align="center"><b>Dark theme</b>, Ocean accent</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/new-chat.png" alt="Empty new chat inviting you to add files" /></td>
+    <td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance panel with theme and accent color options" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>New chat</b>: each chat starts with its own files</td>
+    <td align="center"><b>Appearance</b>: Light, Dark or Auto, plus 5 accent colors</td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/mobile.png" alt="Doc-QA on a phone-sized screen" width="300" /><br/>
+  <b>Mobile</b>: the sidebar becomes a slide-out menu
+</p>
 
 ## How it works
 
+```mermaid
+flowchart LR
+    subgraph Upload["📥 Upload (background)"]
+        A[File] --> B[Extract text<br/>PDFBox / POI]
+        B --> C[Chunk<br/>1200 chars, 200 overlap]
+        C --> D[Gemini embeddings<br/>768 dims]
+        D --> E[(PostgreSQL<br/>+ pgvector)]
+    end
+    subgraph Ask["💬 Ask"]
+        Q[Question] --> F[Embed question]
+        F --> G[Top-6 cosine search<br/>this chat's files only]
+        E --> G
+        G --> H[Prompt with numbered<br/>excerpts + chat history]
+        H --> I[Gemini or Claude]
+        I --> J[Streamed answer<br/>with citations]
+    end
 ```
-Upload ─► extract text (PDFBox / POI) ─► chunk (1200 chars, 200 overlap)
-       ─► Gemini embeddings (RETRIEVAL_DOCUMENT) ─► pgvector `chunks` table
 
-Question ─► Gemini embedding (RETRIEVAL_QUERY) ─► top-k cosine search in pgvector
-         ─► Claude, given the numbered excerpts ─► streamed answer with [n] citations
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, TypeScript, Vite, react-markdown |
+| Backend | Spring Boot 3.5 (Java 21), REST plus Server-Sent Events, JdbcTemplate, Flyway |
+| Database | PostgreSQL 17 + pgvector (HNSW cosine index), run in Docker |
+| Embeddings | Google Gemini `gemini-embedding-001` |
+| Answers | Gemini `gemini-flash-latest` by default, with `gemini-flash-lite-latest` as a fallback, or Claude `claude-opus-5-5` |
+| Text extraction | Apache PDFBox (PDF), Apache POI (DOCX), plain text (TXT, MD, CSV, JSON, HTML, XML, LOG) |
+
+## Quick start
+
+### You need
+
+- **Java 21+**: [Adoptium](https://adoptium.net)
+- **Node.js 18+**: [nodejs.org](https://nodejs.org)
+- **Docker Desktop**: [docker.com](https://www.docker.com/products/docker-desktop)
+- **A free Gemini API key**: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+
+### Windows: one click
+
+```powershell
+git clone https://github.com/aashvin-30/doc-qa.git
+cd doc-qa
+start.bat
 ```
 
-Ingestion runs in the background. A document shows as `PROCESSING` until its status becomes `READY` or `FAILED`.
+`start.bat` checks Java, Node, your API key and Docker. It then starts the database, backend and frontend, and opens **http://localhost:5173**. On the first run it asks for your Gemini key and saves it. To stop, run `stop.bat`; `stop-all.bat` also stops the database.
 
-## Prerequisites
-
-- Java 21+ (Maven isn't required because the project includes the `mvnw` wrapper)
-- Node 18+
-- PostgreSQL with pgvector. Docker is the easiest way to get it.
-- `JAVA_HOME` pointing at your JDK. `mvnw.cmd` needs it.
-- `GEMINI_API_KEY`, free from https://aistudio.google.com/apikey. That's all you need by default.
-- Optional: `ANTHROPIC_API_KEY` from https://console.anthropic.com, to have Claude write the answers (`ANSWER_PROVIDER=claude`).
-
-## Run it
+### Manual (any OS)
 
 ```bash
 # 1. Database
 docker compose up -d
 
-# 2. Backend  (http://localhost:8080)
+# 2. Backend → http://localhost:8080
 cd backend
-# PowerShell:  $env:GEMINI_API_KEY="AIza..."
-export GEMINI_API_KEY=AIza...
-# optional, to use Claude for answers:
-# export ANSWER_PROVIDER=claude ANTHROPIC_API_KEY=sk-ant-...
-./mvnw spring-boot:run          # Windows: mvnw.cmd spring-boot:run
+export GEMINI_API_KEY=your-key          # PowerShell: $env:GEMINI_API_KEY="your-key"
+./mvnw spring-boot:run                  # Windows: mvnw.cmd spring-boot:run
 
-# 3. Frontend (http://localhost:5173)
+# 3. Frontend → http://localhost:5173  (in a second terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-In development, Vite proxies `/api` to `localhost:8080`. For a separate deployment, set `VITE_API_BASE` on the frontend and `CORS_ORIGINS` on the backend.
+> **Want Claude to write the answers?** Set `ANSWER_PROVIDER=claude` and `ANTHROPIC_API_KEY=sk-ant-...` before starting the backend. Embeddings still use Gemini.
+
+## Configuration
+
+Settings live in `backend/src/main/resources/application.yml`, and each one can be overridden with an environment variable.
+
+| Variable / key | Default | What it does |
+|---|---|---|
+| `GEMINI_API_KEY` | (required) | Used for embeddings, and for answers when the provider is Gemini |
+| `ANSWER_PROVIDER` | `gemini` | `gemini` or `claude` |
+| `ANTHROPIC_API_KEY` | (none) | Needed only when `ANSWER_PROVIDER=claude` |
+| `GEMINI_CHAT_MODEL` | `gemini-flash-latest` | The model that writes answers |
+| `GEMINI_FALLBACK_MODELS` | `gemini-flash-lite-latest` | Used when the main model is busy. A failing model is skipped for 5 minutes. |
+| `DB_URL` / `DB_USER` / `DB_PASSWORD` | `localhost:5432/docqa`, `docqa` / `docqa` | Database connection |
+| `app.retrieval.top-k` / `min-similarity` | `6` / `0.35` | How many excerpts are retrieved, and the minimum match score |
+| `app.chunking.chunk-size` / `chunk-overlap` | `1200` / `200` | Chunk size and overlap, in characters |
+| `CORS_ORIGINS` / `VITE_API_BASE` | (dev proxy) | For deploying the frontend and backend separately |
+
+The maximum upload size is 25 MB per file.
 
 ## REST API
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/documents?conversationId=` | Multipart upload with a `file` field. With `conversationId`, the file is attached to that chat. Returns `202` and the document (status `PROCESSING`). |
-| `GET` | `/api/documents` | Lists documents, most recently used or uploaded first (`lastUsedAt`). |
-| `GET` | `/api/documents/{id}` | Gets one document and its status. |
-| `DELETE` | `/api/documents/{id}` | Deletes a document and its chunks. |
-| `POST` | `/api/chat/stream` | Takes `{question, conversationId?, documentIds?}`. Omit `conversationId` to start a new saved chat. Returns an SSE stream with the events `conversation`, `sources`, `delta`, `done` and `error`. |
-| `POST` | `/api/chat/ask` | Same body, non-streaming. Returns `{conversationId, answer, sources}`. |
-| `GET` | `/api/conversations` | Lists saved chats, newest first. |
-| `POST` | `/api/conversations` | Creates an empty chat. |
-| `GET` | `/api/conversations/{id}` | Gets one chat with its messages, sources and attached `documents`. |
-| `POST` | `/api/conversations/{id}/documents` | Attaches an already-uploaded file with `{documentId}`. |
-| `DELETE` | `/api/conversations/{id}/documents/{docId}` | Removes a file from the chat. The file stays in your library. |
-| `PATCH` | `/api/conversations/{id}` | Renames a chat with `{title}`. |
-| `DELETE` | `/api/conversations/{id}` | Deletes one chat. `DELETE /api/conversations` deletes all of them. |
-| `GET` | `/actuator/health` | Health check. |
+| `POST` | `/api/documents?conversationId=` | Upload a file (multipart field `file`), optionally attaching it to a chat. Returns `202`. |
+| `GET` | `/api/documents` | List files, most recently used first |
+| `GET` / `DELETE` | `/api/documents/{id}` | Get a file's status, or delete the file and its chunks |
+| `GET` / `POST` | `/api/conversations` | List chats / create an empty chat |
+| `GET` / `PATCH` / `DELETE` | `/api/conversations/{id}` | Get a chat with its messages and files / rename it / delete it |
+| `POST` | `/api/conversations/{id}/documents` | Attach an existing file with `{documentId}` |
+| `DELETE` | `/api/conversations/{id}/documents/{docId}` | Remove a file from a chat (the file stays in your library) |
+| `POST` | `/api/chat/stream` | Ask a question with `{question, conversationId?}`. Returns an SSE stream of `conversation`, `sources`, `delta`, `done` and `error` events. |
+| `POST` | `/api/chat/ask` | The same request, non-streaming. Returns `{conversationId, answer, sources}`. |
+| `GET` | `/actuator/health` | Health check |
 
 ```bash
 curl -F file=@handbook.pdf http://localhost:8080/api/documents
 curl -N -X POST http://localhost:8080/api/chat/stream \
   -H "Content-Type: application/json" \
-  -d '{"question":"What is the vacation policy?"}'
+  -d '{"question":"How many vacation days do I get?"}'
 ```
 
-## Configuration
-
-These live in `backend/src/main/resources/application.yml`, and each one can be overridden with an environment variable:
-
-| Key | Default | Notes |
-|---|---|---|
-| `DB_URL` / `DB_USER` / `DB_PASSWORD` | `localhost:5432/docqa`, `docqa`/`docqa` | |
-| `ANSWER_PROVIDER` | `gemini` | `gemini` or `claude`. Embeddings always use Gemini. |
-| `GEMINI_CHAT_MODEL` | `gemini-flash-latest` | The Gemini model that writes answers. |
-| `GEMINI_FALLBACK_MODELS` | `gemini-flash-lite-latest` | Tried when the main model is busy (429/5xx) or slow. A failing model is skipped for 5 minutes. |
-| `app.claude.model` | `claude-opus-5-5` | |
-| `app.claude.effort` | `medium` | `low` gives faster and cheaper answers. `high` gives more thorough ones. |
-| `app.claude.fallbacks-enabled` | `true` | Turns on the server-side refusal fallback (beta `server-side-fallback-2026-07-01`). |
-| `app.retrieval.top-k` | `6` | Number of excerpts sent to Claude. |
-| `app.retrieval.min-similarity` | `0.35` | Drops weak matches. |
-| `app.gemini.dimensions` | `768` | If you change this, also change `vector(768)` in the Flyway migration. |
-| `app.chunking.chunk-size` / `chunk-overlap` | `1200` / `200` | Measured in characters. |
-
-## Project layout
+## Project structure
 
 ```
-backend/src/main/java/com/docqa
-  config/      AppProperties, CORS + thread pools, Claude client
-  document/    upload/list/delete REST + repository
-  ingest/      TextExtractor (PDF/DOCX/text), Chunker, async IngestionService
-  embedding/   GeminiEmbeddingClient (REST)
-  retrieval/   ChunkRepository (pgvector insert + similarity search)
-  chat/        ChatService (RAG prompt + Claude streaming), ChatController (JSON + SSE)
-frontend/src
-  api.ts       REST + SSE client
-  components/  DocumentSidebar, ChatPanel, MessageBubble
+doc-qa/
+├── backend/                     Spring Boot app
+│   └── src/main/java/com/docqa/
+│       ├── config/              settings, CORS, thread pools, HTTP clients
+│       ├── document/            upload / list / delete files
+│       ├── ingest/              text extraction, chunking, background indexing
+│       ├── embedding/           Gemini embedding client
+│       ├── retrieval/           pgvector storage and similarity search
+│       ├── conversation/        saved chats and their files
+│       └── chat/                RAG prompt, Gemini / Claude answer generators, SSE
+│   └── src/main/resources/db/migration/   Flyway SQL (V1–V3)
+├── frontend/                    React + Vite app
+│   └── src/
+│       ├── components/          Sidebar, ChatPanel, MessageBubble, Appearance
+│       ├── api.ts               REST, upload progress and SSE client
+│       └── styles.css           "Aurora" theme
+├── docs/wiki/                   full documentation
+├── docs/screenshots/            images used in the docs
+├── docker-compose.yml           PostgreSQL 17 + pgvector
+├── start.bat / stop.bat         one-click launchers for Windows
+└── PROJECT_REPORT.md            full project report
 ```
 
-## Ideas for next steps
+## Roadmap
 
-- Hybrid search (pgvector plus Postgres full-text) with re-ranking
-- OCR for scanned PDFs
-- Saved conversations and authentication
-- A Dockerfile for the backend and frontend
+- [ ] Hybrid search (pgvector plus PostgreSQL full-text) with re-ranking
+- [ ] OCR for scanned PDFs
+- [ ] User accounts and per-user data
+- [ ] Dockerfiles, so the whole app starts with `docker compose up`
+- [ ] End-to-end tests in CI
+
+## More details
+
+- 📚 **[Documentation wiki](docs/wiki/README.md)**: the [User Guide](docs/wiki/User-Guide.md), [Architecture](docs/wiki/Architecture.md), [Configuration](docs/wiki/Configuration.md), [REST API](docs/wiki/REST-API.md), [Database](docs/wiki/Database.md), [Development](docs/wiki/Development.md), [Troubleshooting](docs/wiki/Troubleshooting.md) and [FAQ](docs/wiki/FAQ.md)
+- 📝 **[PROJECT_REPORT.md](PROJECT_REPORT.md)**: the architecture, data model, test results and design decisions
+
+---
+
+<div align="center">
+Built by <a href="https://github.com/aashvin-30">aashvin-30</a> with Spring Boot, React, pgvector and Gemini.
+</div>

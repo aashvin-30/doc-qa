@@ -38,7 +38,7 @@ export default function ChatPanel(p: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const ownId = useRef<string | null>(null) // chat whose messages are already on screen
@@ -78,7 +78,9 @@ export default function ChatPanel(p: Props) {
   }, [p.conversationId])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    // Scroll only the message list (scrollIntoView would also scroll the page itself).
+    const el = listRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
   // Close the + menu on outside click / Escape.
@@ -203,7 +205,7 @@ export default function ChatPanel(p: Props) {
         </div>
       )}
 
-      <div className="messages">
+      <div className="messages" ref={listRef}>
         {loading ? (
           <div className="empty-state muted">Loading chat…</div>
         ) : messages.length === 0 ? (
@@ -249,7 +251,6 @@ export default function ChatPanel(p: Props) {
         ) : (
           messages.map((m) => <MessageBubble key={m.id} message={m} />)
         )}
-        <div ref={bottomRef} />
       </div>
 
       <form

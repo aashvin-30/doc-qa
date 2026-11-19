@@ -6,6 +6,22 @@ import type { ChatMessage } from '../types'
 /** Turn bare [n] citation markers into links we can render as clickable chips. */
 const linkCitations = (text: string) => text.replace(/\[(\d{1,2})\](?!\()/g, '[$1](#cite-$1)')
 
+/**
+ * Models often put <br> inside table cells. Raw HTML is otherwise ignored (shown as text),
+ * so turn just those tags into real Markdown line breaks.
+ */
+type MdNode = { type: string; value?: string; children?: MdNode[] }
+const BR = /^<br\s*\/?>$/i
+const remarkBreaks = () => (tree: MdNode) => {
+  const walk = (node: MdNode) => {
+    if (!node.children) return
+    node.children = node.children.map((c) =>
+      c.type === 'html' && BR.test((c.value ?? '').trim()) ? { type: 'break' } : (walk(c), c),
+    )
+  }
+  walk(tree)
+}
+
 export default function MessageBubble({ message }: { message: ChatMessage }) {
   const [active, setActive] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
@@ -43,7 +59,7 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
         ) : (
           <div className="markdown">
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkBreaks]}
               components={{
                 a: ({ href, children }) => {
                   const m = href?.match(/^#cite-(\d+)$/)
